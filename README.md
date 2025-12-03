@@ -3,7 +3,8 @@
 ![Language](https://img.shields.io/badge/language-Rust-rust.svg)
 ![Status](https://img.shields.io/badge/status-in%20development-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Build Status](https://github.com/SammmE/ferros/actions/workflows/build.yml/badge.svg)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SammmE/ferros/rust.yml)
+
 
 A barebones, `no_std` operating system kernel written from scratch in Rust, primarily for educational purposes.
 
