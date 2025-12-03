@@ -73,10 +73,11 @@ You'll need the following tools to build and run FerrOS:
 This is the high-level plan for FerrOS, from a "Hello, World!" kernel to a basic interactive system.
 
 ### Phase 1: The Core Kernel & Bootstrapping
-* [ ] **Project Setup:** Create a `no_std` Rust binary.
-* [ ] **Bootloader:** Integrate the `bootimage` crate to create a bootable image.
-* [ ] **VGA Text Mode Driver:** Implement a basic logger to print formatted text to the screen.
-* [ ] **Panic Handler:** Implement a kernel panic function that prints info and halts.
+* [x] **Project Setup:** Create a `no_std` Rust binary.
+* [x] **Bootloader:** Integrate the `bootimage` crate to create a bootable image.
+~~* [] **VGA Text Mode Driver:** Implement a basic logger to print formatted text to the screen.~~
+* [] **Set up FrameBuffer**: Implement a basic framebuffer to log and print text.
+* [x] **Panic Handler:** Implement a kernel panic function that prints info and halts.
 
 ### Phase 2: Interrupts & Memory Management
 * [ ] **GDT (Global Descriptor Table):** Set up a basic GDT.
