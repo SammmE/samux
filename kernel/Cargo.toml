@@ -10,3 +10,11 @@ x86_64 = "0.15.4"
 font8x8 = { version = "0.3.1", default-features = false, features = ["unicode"] }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 spin = "0.10.0"
+pic8259 = "0.11.0"
+pc-keyboard = "0.8.0"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

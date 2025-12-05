@@ -1,18 +1,26 @@
 #![no_std]
 #![no_main]
 
-use bootloader_api::{BootInfo, entry_point};
+use bootloader_api::{BootInfo, BootloaderConfig, config::Mapping, entry_point};
 use font8x8::{BASIC_FONTS, UnicodeFonts};
+use x86_64::VirtAddr;
 use x86_64::instructions::hlt;
 
-use kernel::interrupts::init_idt;
+use kernel::init_all;
+use kernel::memory;
 use kernel::serial_println;
 
-entry_point!(kernel_main);
+pub static BOOTLOADER_CONFIG: BootloaderConfig = {
+    let mut config = BootloaderConfig::new_default();
+    config.mappings.physical_memory = Some(Mapping::Dynamic);
+    config
+};
+
+entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     serial_println!("Kernel initialized successfully!\n");
-    init_idt();
+    init_all();
     serial_println!("IDT initialized.\n");
 
     if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
