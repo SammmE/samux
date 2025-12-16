@@ -10,6 +10,7 @@ pub mod interrupts;
 pub mod memory;
 pub mod panic;
 pub mod serial;
+pub mod task;
 
 pub fn init_all() {
     gdt::init();

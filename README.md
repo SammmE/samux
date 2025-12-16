@@ -90,7 +90,7 @@ This is the high-level plan for FerrOS, from a "Hello, World!" kernel to a basic
 * [x] **PIC/APIC:** Handle hardware interrupts from the PIC (or APIC).
 * [x] **PIT (Programmable Interval Timer):** Set up the timer for scheduling.
 * [x] **PS/2 Keyboard Driver:** Read scancodes from the keyboard and translate them to characters.
-* [ ] **Preemptive Multitasking:** Implement basic task switching and a simple scheduler.
+* [x] **Preemptive Multitasking:** Implement basic task switching and a simple scheduler.
 
 ### Phase 4: Userspace & Filesystems
 * [ ] **Syscalls:** Design and implement a basic syscall interface.
