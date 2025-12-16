@@ -76,20 +76,20 @@ This is the high-level plan for FerrOS, from a "Hello, World!" kernel to a basic
 * [x] **Project Setup:** Create a `no_std` Rust binary.
 * [x] **Bootloader:** Integrate the `bootimage` crate to create a bootable image.
 ~~* [] **VGA Text Mode Driver:** Implement a basic logger to print formatted text to the screen.~~
-* [] **Set up FrameBuffer**: Implement a basic framebuffer to log and print text.
+* [x] **Set up FrameBuffer**: Implement a basic framebuffer to log and print text.
 * [x] **Panic Handler:** Implement a kernel panic function that prints info and halts.
 
 ### Phase 2: Interrupts & Memory Management
 * [x] **GDT (Global Descriptor Table):** Set up a basic GDT.
 * [x] **IDT (Interrupt Descriptor Table):** Implement an IDT to handle CPU exceptions (e.g., page faults, double faults).
-* [ ] **Paging (Paging V4):** Implement a virtual memory manager, including mapping the kernel and setting up page tables.
-* [ ] **Heap Allocator:** Provide a global allocator (like `linked_list_allocator`) to enable using `alloc` (e.g., `Box`, `Vec`).
-* [ ] **Physical Frame Allocator:** Create an allocator to manage physical memory frames (e.g., a simple bitmap or free list).
+* [x] **Paging (Paging V4):** Implement a virtual memory manager, including mapping the kernel and setting up page tables.
+* [x] **Heap Allocator:** Provide a global allocator (like `linked_list_allocator`) to enable using `alloc` (e.g., `Box`, `Vec`).
+* [x] **Physical Frame Allocator:** Create an allocator to manage physical memory frames (e.g., a simple bitmap or free list).
 
 ### Phase 3: Hardware & Concurrency
-* [ ] **PIC/APIC:** Handle hardware interrupts from the PIC (or APIC).
-* [ ] **PIT (Programmable Interval Timer):** Set up the timer for scheduling.
-* [ ] **PS/2 Keyboard Driver:** Read scancodes from the keyboard and translate them to characters.
+* [x] **PIC/APIC:** Handle hardware interrupts from the PIC (or APIC).
+* [x] **PIT (Programmable Interval Timer):** Set up the timer for scheduling.
+* [x] **PS/2 Keyboard Driver:** Read scancodes from the keyboard and translate them to characters.
 * [ ] **Preemptive Multitasking:** Implement basic task switching and a simple scheduler.
 
 ### Phase 4: Userspace & Filesystems
