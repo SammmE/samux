@@ -8,7 +8,6 @@ use font8x8::{BASIC_FONTS, UnicodeFonts};
 use futures_util::stream::StreamExt;
 use pc_keyboard::{DecodedKey, HandleControl, Keyboard, ScancodeSet1, layouts};
 use x86_64::VirtAddr;
-use x86_64::instructions::hlt;
 
 use kernel::allocator;
 use kernel::framebuffer::{self, WRITER};
@@ -16,7 +15,7 @@ use kernel::init_all;
 use kernel::memory::{self, BootInfoFrameAllocator};
 use kernel::serial_println;
 use kernel::task::keyboard::ScancodeStream;
-use kernel::task::{Task, simple_executor::SimpleExecutor};
+use kernel::task::{Task, executor::Executor};
 use kernel::{print, println};
 
 use alloc::{boxed::Box, rc::Rc, vec, vec::Vec};
@@ -40,15 +39,12 @@ async fn example_task() {
 
 async fn print_keypresses() {
     let mut scancode_stream = ScancodeStream::new();
-
-    // We move the Keyboard state machine here, into the async task
     let mut keyboard = Keyboard::new(
         ScancodeSet1::new(),
         layouts::Us104Key,
         HandleControl::Ignore,
     );
 
-    // This loop yields (sleeps) when the stream returns Poll::Pending
     while let Some(scancode) = scancode_stream.next().await {
         if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
             if let Some(key) = keyboard.process_keyevent(key_event) {
@@ -75,21 +71,15 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
         let info = framebuffer.info();
         let buffer = framebuffer.buffer_mut();
-
-        // Lock the global writer and initialize it
         let mut writer = WRITER.lock();
         *writer = Some(framebuffer::FrameBufferWriter::new(buffer, info));
     }
 
     println!("Hello World from the Framebuffer!");
-    println!("The heap value is: {:?}", Box::new(42));
 
-    let mut executor = SimpleExecutor::new();
+    let executor = Executor::new();
     executor.spawn(Task::new(print_keypresses()));
     executor.spawn(Task::new(example_task()));
-    executor.run(); // This will loop indefinitely polling tasks
 
-    loop {
-        hlt();
-    }
+    executor.run();
 }

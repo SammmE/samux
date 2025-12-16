@@ -1,34 +1,37 @@
 use alloc::boxed::Box;
-use core::task::{Context, Poll};
+use core::fmt;
+use core::sync::atomic::{AtomicU64, Ordering};
 use core::{future::Future, pin::Pin};
+use spin::Mutex;
 
+pub mod executor;
 pub mod keyboard;
-pub mod simple_executor;
 
 pub struct Task {
-    future: Pin<Box<dyn Future<Output = ()>>>, // The persistent future
-    id: TaskId,
+    pub id: TaskId,
+    pub future: Mutex<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>,
 }
 
 impl Task {
-    pub fn new(future: impl Future<Output = ()> + 'static) -> Task {
+    pub fn new(future: impl Future<Output = ()> + Send + 'static) -> Task {
         Task {
-            future: Box::pin(future),
             id: TaskId::new(),
+            future: Mutex::new(Box::pin(future)),
         }
     }
+}
 
-    fn poll(&mut self, context: &mut Context) -> Poll<()> {
-        self.future.as_mut().poll(context)
+impl fmt::Debug for Task {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Task").field("id", &self.id).finish()
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct TaskId(u64);
+pub struct TaskId(u64);
 
 impl TaskId {
     fn new() -> Self {
-        use core::sync::atomic::{AtomicU64, Ordering};
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         TaskId(NEXT_ID.fetch_add(1, Ordering::Relaxed))
     }
