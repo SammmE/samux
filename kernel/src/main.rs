@@ -77,6 +77,15 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     println!("Hello World from the Framebuffer!");
 
+    if let Some(writer) = WRITER.lock().as_mut() {
+        writer.set_color(0, 255, 0); // Green
+    }
+    println!("This should be green");
+
+    if let Some(writer) = WRITER.lock().as_mut() {
+        writer.set_color(255, 255, 255); // Reset to white
+    }
+
     let executor = Executor::new();
     executor.spawn(Task::new(print_keypresses()));
     executor.spawn(Task::new(example_task()));
