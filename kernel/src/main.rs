@@ -14,6 +14,7 @@ use kernel::framebuffer::{self, WRITER};
 use kernel::init_all;
 use kernel::memory::{self, BootInfoFrameAllocator};
 use kernel::serial_println;
+use kernel::shell;
 use kernel::task::keyboard::ScancodeStream;
 use kernel::task::{Task, executor::Executor};
 use kernel::{print, println};
@@ -88,7 +89,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     }
 
     let executor = Executor::new();
-    executor.spawn(Task::new(print_keypresses()));
+    executor.spawn(Task::new(shell::runshell()));
     executor.spawn(Task::new(example_task()));
 
     executor.run();
