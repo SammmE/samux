@@ -3,7 +3,7 @@
 ![Language](https://img.shields.io/badge/language-Rust-rust.svg)
 ![Status](https://img.shields.io/badge/status-in%20development-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SammmE/ferros/rust.yml)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SammmE/samux/rust.yml)
 
 
 A barebones, `no_std` operating system kernel written from scratch in Rust, primarily for educational purposes.
@@ -57,8 +57,8 @@ You'll need the following tools to build and run Samux:
 
 1.  **Clone the repository:**
     ```sh
-    git clone [https://github.com/](https://github.com/)<YOUR_USERNAME>/ferros.git
-    cd ferros
+    git clone https://github.com/sammme/samux.git
+    cd samux
     ```
 
 2.  **Run the OS:**
