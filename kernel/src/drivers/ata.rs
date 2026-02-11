@@ -6,7 +6,7 @@ pub const SECTOR_SIZE: usize = 512;
 // Command Constants
 const CMD_READ_SECTORS: u8 = 0x20;
 const CMD_WRITE_SECTORS: u8 = 0x30;
-const _CMD_IDENTIFY: u8 = 0xEC; // (Unused for now, supressing warning)
+const CMD_IDENTIFY: u8 = 0xEC;
 
 // Status Register Bits
 const STATUS_BSY: u8 = 0x80; // Busy
@@ -140,5 +140,49 @@ impl AtaDrive {
                 return Ok(());
             }
         }
+    }
+
+    /// Sends the IDENTIFY command to retrieve drive information.
+    /// Returns a 256-word (512 byte) buffer of raw data.
+    pub fn identify(&mut self) -> Result<[u16; 256], &'static str> {
+        self.wait_busy();
+
+        let drive_select = if self.is_master { 0xA0 } else { 0xB0 };
+
+        unsafe {
+            self.drive_select_port.write(drive_select);
+            self.sector_count_port.write(0);
+            self.lba_low_port.write(0);
+            self.lba_mid_port.write(0);
+            self.lba_high_port.write(0);
+            self.command_port.write(CMD_IDENTIFY);
+        }
+
+        let status = unsafe { self.status_port.read() };
+
+        if status == 0 {
+            return Err("Drive does not exist");
+        }
+
+        self.poll_status()?;
+
+        let mut buffer = [0u16; 256];
+        for i in 0..256 {
+            buffer[i] = unsafe { self.data_port.read() };
+        }
+
+        Ok(buffer)
+    }
+
+    /// Returns the total number of sectors on the drive (LBA28).
+    pub fn get_total_sectors(&mut self) -> Result<u32, &'static str> {
+        let data = self.identify()?;
+
+        // Words 60 and 61 contain the total user addressable sectors (LBA28)
+        // Word 60 = Lower 16 bits
+        // Word 61 = Upper 16 bits
+        let sectors = (data[60] as u32) | ((data[61] as u32) << 16);
+
+        Ok(sectors)
     }
 }

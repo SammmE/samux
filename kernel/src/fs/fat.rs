@@ -1,5 +1,6 @@
 use crate::drivers::ata::AtaDrive;
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 
 // stolen off OSDev
@@ -117,7 +118,6 @@ impl Fat32Driver {
 
     pub fn new(mut drive: AtaDrive) -> Self {
         let mut raw_buffer = [0u16; 256];
-        // FIX: call read with sector count 1 and u16 buffer
         drive.read(0, 1, &mut raw_buffer).unwrap();
 
         // Manual conversion for BPB parsing
@@ -165,7 +165,6 @@ impl Fat32Driver {
         let ent_offset = (fat_offset % 512) as usize;
 
         let mut buf = [0u8; 512];
-        // FIX: Removed `* 512` (ATA takes LBA, not bytes) and used helper
         self.read_sector_into_u8(fat_sector, &mut buf);
 
         let entry = unsafe {
@@ -258,5 +257,245 @@ impl Fat32Driver {
         }
 
         None
+    }
+
+    fn write_sector_from_u8(&mut self, lba: u32, buffer: &[u8; 512]) {
+        let mut raw_buffer = [0u16; 256];
+        for (i, word) in raw_buffer.iter_mut().enumerate() {
+            *word = (buffer[i * 2] as u16) | ((buffer[i * 2 + 1] as u16) << 8);
+        }
+        self.drive.write(lba, 1, &raw_buffer).unwrap();
+    }
+
+    fn find_free_cluster(&mut self) -> Option<u32> {
+        let mut cluster = 2;
+        loop {
+            let fat_offset = cluster * 4;
+            let fat_sector = self.fat_start_sector + (fat_offset / 512);
+            let ent_offset = (fat_offset % 512) as usize;
+
+            let mut buf = [0u8; 512];
+            self.read_sector_into_u8(fat_sector, &mut buf);
+
+            let entry = unsafe {
+                let ptr = buf.as_ptr().add(ent_offset) as *const u32;
+                *ptr
+            };
+
+            if (entry & 0x0FFF_FFFF) == 0 {
+                return Some(cluster);
+            }
+            cluster += 1;
+            if cluster >= 0x0FFF_FFF7 {
+                break;
+            }
+        }
+        None
+    }
+
+    fn get_fat_entry(&mut self, cluster: u32) -> u32 {
+        let fat_offset = cluster * 4;
+        let fat_sector = self.fat_start_sector + (fat_offset / 512);
+        let ent_offset = (fat_offset % 512) as usize;
+
+        let mut buf = [0u8; 512];
+        self.read_sector_into_u8(fat_sector, &mut buf);
+
+        unsafe {
+            let ptr = buf.as_ptr().add(ent_offset) as *const u32;
+            (*ptr) & 0x0FFF_FFFF
+        }
+    }
+
+    fn set_fat_entry(&mut self, cluster: u32, value: u32) {
+        let fat_offset = cluster * 4;
+        let fat_sector = self.fat_start_sector + (fat_offset / 512);
+        let ent_offset = (fat_offset % 512) as usize;
+
+        let mut buf = [0u8; 512];
+        self.read_sector_into_u8(fat_sector, &mut buf);
+
+        // Update the value in the buffer
+        unsafe {
+            let ptr = buf.as_mut_ptr().add(ent_offset) as *mut u32;
+            *ptr = (*ptr & 0xF000_0000) | (value & 0x0FFF_FFFF);
+        }
+
+        // Write it back
+        self.write_sector_from_u8(fat_sector, &buf);
+    }
+
+    fn total_clusters(&mut self) -> u32 {
+        let total_sectors = self.drive.get_total_sectors().unwrap_or(0);
+
+        if total_sectors <= self.data_start_sector {
+            return 0;
+        }
+
+        let data_sectors = total_sectors - self.data_start_sector;
+        data_sectors / self.sectors_per_cluster as u32
+    }
+
+    pub fn create_file(&mut self, filename: &str, data: &[u8]) -> Result<(), &'static str> {
+        let clusters_needed = (data.len() as u32 + (self.sectors_per_cluster * 512 - 1))
+            / (self.sectors_per_cluster * 512);
+
+        if clusters_needed == 0 {
+            return Err("Cannot create empty file (logic limitation)");
+        }
+
+        if self.file_exists(filename) {
+            return Err("File already exists");
+        }
+
+        let mut allocated_clusters = Vec::new();
+
+        // Find enough clusters
+        for _ in 0..clusters_needed {
+            if let Some(cluster) = self.find_free_cluster() {
+                allocated_clusters.push(cluster);
+                // Temporarily mark as EOF so find_free_cluster doesn't find it again immediately
+                self.set_fat_entry(cluster, 0x0FFF_FFFF);
+            } else {
+                // Rollback: Free what we allocated if we run out of space
+                for &c in &allocated_clusters {
+                    self.set_fat_entry(c, 0);
+                }
+                return Err("Not enough free clusters");
+            }
+        }
+
+        // Write Data
+        for i in 0..allocated_clusters.len() {
+            let start = (i as usize) * (self.sectors_per_cluster as usize) * 512;
+            let end = core::cmp::min(
+                start + (self.sectors_per_cluster as usize) * 512,
+                data.len(),
+            );
+            let cluster_data = &data[start..end];
+
+            // Buffer needs to be full cluster size to act as padding for the last sector
+            let mut cluster_buffer = vec![0u8; (self.sectors_per_cluster * 512) as usize];
+            cluster_buffer[..cluster_data.len()].copy_from_slice(cluster_data);
+
+            let start_lba = self.cluster_to_lba(allocated_clusters[i]);
+
+            // Write sectors for this cluster
+            for j in 0..self.sectors_per_cluster {
+                let sector_offset = (j * 512) as usize;
+                let mut sector_buf = [0u8; 512];
+                sector_buf.copy_from_slice(&cluster_buffer[sector_offset..sector_offset + 512]);
+                self.write_sector_from_u8(start_lba + j, &sector_buf);
+            }
+
+            // Link FAT Chain
+            if i < allocated_clusters.len() - 1 {
+                self.set_fat_entry(allocated_clusters[i], allocated_clusters[i + 1]);
+            } else {
+                self.set_fat_entry(allocated_clusters[i], 0x0FFF_FFFF); // EOF
+            }
+        }
+
+        // Add Directory Entry after checking if file exists
+        self.add_directory_entry(filename, allocated_clusters[0], data.len() as u32)?;
+
+        Ok(())
+    }
+
+    pub fn file_exists(&mut self, filename: &str) -> bool {
+        let mut current_cluster = Some(self.root_cluster);
+
+        while let Some(cluster) = current_cluster {
+            let data = self.read_cluster(cluster);
+            for chunk in data.chunks(32) {
+                let entry = unsafe { &*(chunk.as_ptr() as *const DirectoryEntry) };
+                if entry.is_end() {
+                    return false;
+                }
+                if !entry.is_free() && !entry.is_long_name() {
+                    if entry.get_filename().eq_ignore_ascii_case(filename) {
+                        return true;
+                    }
+                }
+            }
+            current_cluster = self.next_cluster(cluster);
+        }
+
+        false
+    }
+
+    // Helper to add the directory entry (extracted for clarity)
+    fn add_directory_entry(
+        &mut self,
+        filename: &str,
+        start_cluster: u32,
+        size: u32,
+    ) -> Result<(), &'static str> {
+        // 1. Format Filename (8.3 format)
+        let mut name = [0x20u8; 8];
+        let mut ext = [0x20u8; 3];
+
+        let upper_name = filename.to_ascii_uppercase();
+        let parts: Vec<&str> = upper_name.split('.').collect();
+
+        if parts.is_empty() || parts[0].len() > 8 || (parts.len() > 1 && parts[1].len() > 3) {
+            return Err("Invalid filename (Must be 8.3 format)");
+        }
+
+        for (i, byte) in parts[0].bytes().enumerate() {
+            name[i] = byte;
+        }
+        if parts.len() > 1 {
+            for (i, byte) in parts[1].bytes().enumerate() {
+                ext[i] = byte;
+            }
+        }
+
+        // 2. Find free slot in root directory
+        let dir_sector = self.cluster_to_lba(self.root_cluster);
+        let mut dir_buf = [0u8; 512];
+
+        // Scan root cluster (Limitation: Only scans first cluster of root dir)
+        self.read_sector_into_u8(dir_sector, &mut dir_buf);
+
+        let mut entry_offset = 0;
+        let mut found_spot = false;
+
+        for i in (0..512).step_by(32) {
+            if dir_buf[i] == 0x00 || dir_buf[i] == 0xE5 {
+                entry_offset = i;
+                found_spot = true;
+                break;
+            }
+        }
+
+        if !found_spot {
+            return Err("Root directory full");
+        }
+
+        // 3. Write Entry
+        let new_entry = DirectoryEntry {
+            name,
+            ext,
+            attributes: 0x20,
+            reserved: 0,
+            ctime_tenth: 0,
+            ctime: 0,
+            cdate: 0,
+            adate: 0,
+            cluster_high: ((start_cluster >> 16) & 0xFFFF) as u16,
+            time: 0,
+            date: 0,
+            cluster_low: (start_cluster & 0xFFFF) as u16,
+            size,
+        };
+
+        unsafe {
+            let ptr = dir_buf.as_mut_ptr().add(entry_offset) as *mut DirectoryEntry;
+            *ptr = new_entry;
+        }
+
+        self.write_sector_from_u8(dir_sector, &dir_buf);
+        Ok(())
     }
 }

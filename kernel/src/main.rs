@@ -4,22 +4,17 @@
 extern crate alloc;
 
 use bootloader_api::{BootInfo, BootloaderConfig, config::Mapping, entry_point};
-use font8x8::{BASIC_FONTS, UnicodeFonts};
-use futures_util::stream::StreamExt;
-use pc_keyboard::{DecodedKey, HandleControl, KeyCode, Keyboard, ScancodeSet1, layouts};
 use x86_64::VirtAddr;
+use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB};
 
 use kernel::allocator;
 use kernel::framebuffer::{self, WRITER};
 use kernel::init_all;
 use kernel::memory::{self, BootInfoFrameAllocator};
+use kernel::println;
 use kernel::serial_println;
 use kernel::shell;
-use kernel::task::keyboard::ScancodeStream;
 use kernel::task::{Task, executor::Executor};
-use kernel::{print, println};
-
-use alloc::{boxed::Box, rc::Rc, vec, vec::Vec};
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -28,36 +23,6 @@ pub static BOOTLOADER_CONFIG: BootloaderConfig = {
 };
 
 entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
-
-async fn async_number() -> u32 {
-    42
-}
-
-async fn example_task() {
-    let number = async_number().await;
-    println!("Async number: {}", number);
-}
-
-async fn print_keypresses() {
-    let mut scancode_stream = ScancodeStream::new();
-    let mut keyboard = Keyboard::new(
-        ScancodeSet1::new(),
-        layouts::Us104Key,
-        HandleControl::Ignore,
-    );
-
-    while let Some(scancode) = scancode_stream.next().await {
-        if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
-            if let Some(key) = keyboard.process_keyevent(key_event) {
-                match key {
-                    DecodedKey::Unicode(character) => print!("{}", character),
-                    DecodedKey::RawKey(KeyCode::Backspace) => print!("\x08"),
-                    DecodedKey::RawKey(key) => print!("{:?}", key),
-                }
-            }
-        }
-    }
-}
 
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     serial_println!("Kernel initialized successfully!\n");
@@ -69,6 +34,43 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_regions) };
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+
+    // USERSPACE TEST
+
+    let user_code_page = Page::containing_address(VirtAddr::new(0x1000_0000));
+    let user_stack_page = Page::containing_address(VirtAddr::new(0x2000_0000));
+    let flags =
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
+
+    unsafe {
+        mapper
+            .map_to(user_code_page, code_frame, flags, &mut frame_allocator)
+            .unwrap()
+            .flush();
+        mapper
+            .map_to(user_stack_page, stack_frame, flags, &mut frame_allocator)
+            .unwrap()
+            .flush();
+    }
+
+    let shellcode: [u8; 11] = [
+        0x48, 0xC7, 0xC7, 0x34, 0x12, 0x00, 0x00, 0x0F, 0x05, 0xEB, 0xFE,
+    ];
+
+    unsafe {
+        let dest = user_code_page.start_address().as_mut_ptr::<u8>();
+        core::ptr::copy_nonoverlapping(shellcode.as_ptr(), dest, shellcode.len());
+    }
+
+    println!("Jumping to Userspace...");
+    serial_println!("Jumping to Userspace...");
+
+    unsafe {
+        kernel::syscall::enter_userspace(
+            user_code_page.start_address().as_u64(),
+            user_stack_page.start_address().as_u64() + 4096u64,
+        );
+    }
 
     if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
         let info = framebuffer.info();
@@ -90,7 +92,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     let executor = Executor::new();
     executor.spawn(Task::new(shell::runshell()));
-    executor.spawn(Task::new(example_task()));
 
     executor.run();
 }

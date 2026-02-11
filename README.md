@@ -1,4 +1,4 @@
-# FerrOS
+# Samux
 
 ![Language](https://img.shields.io/badge/language-Rust-rust.svg)
 ![Status](https://img.shields.io/badge/status-in%20development-orange.svg)
@@ -10,7 +10,7 @@ A barebones, `no_std` operating system kernel written from scratch in Rust, prim
 
 ---
 
-## 🦀 Why FerrOS?
+## 🦀 Why Samux?
 
 This project is a journey into the world of low-level systems programming. The primary goals are:
 
@@ -25,7 +25,7 @@ This project is a journey into the world of low-level systems programming. The p
 
 ### Prerequisites
 
-You'll need the following tools to build and run FerrOS:
+You'll need the following tools to build and run Samux:
 
 1.  **Install QEMU:**
     ```sh
@@ -70,7 +70,7 @@ You'll need the following tools to build and run FerrOS:
 
 ## 🗺️ Project Roadmap
 
-This is the high-level plan for FerrOS, from a "Hello, World!" kernel to a basic interactive system.
+This is the high-level plan for Samux, from a "Hello, World!" kernel to a basic interactive system.
 
 ### Phase 1: The Core Kernel & Bootstrapping
 * [x] **Project Setup:** Create a `no_std` Rust binary.

@@ -13,6 +13,7 @@ pub mod memory;
 pub mod panic;
 pub mod serial;
 pub mod shell;
+pub mod syscall;
 pub mod task;
 
 pub fn init_all() {

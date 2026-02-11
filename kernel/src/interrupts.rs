@@ -1,8 +1,5 @@
-use crate::print;
-use crate::serial_print;
 use crate::serial_println;
 use lazy_static::lazy_static;
-use pc_keyboard::{DecodedKey, HandleControl, Keyboard, ScancodeSet1, layouts};
 use pic8259::ChainedPics;
 use spin::Mutex;
 use x86_64::instructions::port::Port;

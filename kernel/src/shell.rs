@@ -12,7 +12,7 @@ use futures_util::stream::StreamExt;
 use pc_keyboard::{DecodedKey, HandleControl, KeyCode, Keyboard, ScancodeSet1, layouts};
 
 pub async fn runshell() {
-    let prompt = "ferros> ";
+    let prompt = "samux> ";
 
     let mut scancode_stream = ScancodeStream::new();
     let mut keyboard = Keyboard::new(
@@ -74,12 +74,20 @@ fn execute_command(command: &str, args: &[&str]) -> Vec<String> {
 
     match command {
         "help" => {
-            output.push("Available commands:".to_string());
+            // basic commands
+            output.push("BASIC COMMANDS:".to_string());
             output.push("  help - Show this help message".to_string());
             output.push("  echo [text] - Echo the provided text".to_string());
             output.push("  clear - Clear the screen".to_string());
+            output.push("  exit - shutdown the system".to_string());
+
+            // filesystem commands
+            output.push("FILESYSTEM COMMANDS:".to_string());
             output.push("  read_disk [lba] - Read a sector from disk".to_string());
-            output.push("  reboot - Reboot the system".to_string());
+            output.push("  ls - List files in the root directory".to_string());
+            output.push("  cat [filename] - Display contents of a file".to_string());
+            output.push("  write [filename] [content] - Create or overwrite a file".to_string());
+            output.push("  disk_info - Show information about the disk".to_string());
         }
         "echo" => {
             let echoed = args.join(" ");
@@ -90,8 +98,8 @@ fn execute_command(command: &str, args: &[&str]) -> Vec<String> {
                 writer.clear();
             }
         }
-        "reboot" => {
-            panic!("Reboot command issued!");
+        "exit" => {
+            panic!("exit command issued!");
         }
         "read_disk" => {
             // Usage: read_disk <lba>
@@ -172,6 +180,46 @@ fn execute_command(command: &str, args: &[&str]) -> Vec<String> {
                 }
             } else {
                 println!("Filesystem not initialized!");
+            }
+        }
+
+        "write" => {
+            // Usage: write <filename> <content...>
+            if args.len() < 2 {
+                println!("Usage: write <filename> <content>");
+                return output;
+            }
+
+            let filename = args[0];
+            // Join the rest of the arguments into the content string
+            let content = args[1..].join(" ");
+
+            let mut fs_lock = FILESYSTEM.lock();
+            if let Some(fs) = fs_lock.as_mut() {
+                match fs.create_file(filename, content.as_bytes()) {
+                    Ok(_) => println!("File '{}' written successfully.", filename),
+                    Err(e) => println!("Error writing file: {}", e),
+                }
+            } else {
+                println!("Filesystem not initialized!");
+            }
+        }
+
+        "disk_info" => {
+            let mut fs_lock = FILESYSTEM.lock();
+            if let Some(fs) = fs_lock.as_mut() {
+                // Access the underlying ATA drive from the FAT driver
+                match fs.drive.get_total_sectors() {
+                    Ok(sectors) => {
+                        let size_mb = (sectors * 512) / 1024 / 1024;
+                        println!("Disk Info:");
+                        println!("  Total Sectors: {}", sectors);
+                        println!("  Size: {} MB", size_mb);
+                    }
+                    Err(e) => println!("Error identifying drive: {}", e),
+                }
+            } else {
+                println!("Filesystem/Drive not initialized!");
             }
         }
 

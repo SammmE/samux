@@ -13,6 +13,31 @@ fn main() {
 
     let user_disk = "user_disk.img";
 
+    // check that user disk exists
+    if !std::path::Path::new(user_disk).exists() {
+        eprintln!(
+            "User disk image '{}' not found. Please create it before running the VM.",
+            user_disk
+        );
+        exit(1);
+    }
+
+    // copy user disk to old_user_disk.img. If it already exists, do old_user_disk_[1-inf].img
+    let mut backup_index = 0;
+    let backup_disk = loop {
+        let backup_name = if backup_index == 0 {
+            "old_user_disk.img".to_string()
+        } else {
+            format!("old_user_disk_{}.img", backup_index)
+        };
+        if !std::path::Path::new(&backup_name).exists() {
+            break backup_name;
+        }
+        backup_index += 1;
+    };
+    std::fs::copy(user_disk, &backup_disk).expect("failed to backup user disk image");
+    println!("Backed up '{}' to '{}'", user_disk, backup_disk);
+
     // choose whether to start the UEFI or BIOS image
     let uefi = match args.get(1).map(|s| s.to_lowercase()) {
         Some(ref s) if s == "uefi" => true,
@@ -62,6 +87,23 @@ fn main() {
         cmd.arg("-drive")
             .arg(format!("format=raw,file={bios_path}"));
     }
+
+    // restore the old user disk, and store the current one in user_disk_new[0-inf].img
+    let mut new_index = 0;
+    let new_disk = loop {
+        let new_name = if new_index == 0 {
+            "user_disk_new.img".to_string()
+        } else {
+            format!("new_user_disk{}.img", new_index)
+        };
+        if !std::path::Path::new(&new_name).exists() {
+            break new_name;
+        }
+        new_index += 1;
+    };
+    std::fs::rename(user_disk, &new_disk).expect("failed to store new user disk image");
+    std::fs::copy(&backup_disk, user_disk).expect("failed to restore old user disk image");
+    println!("Stored new user disk image as '{}'", new_disk);
 
     let mut child = cmd.spawn().expect("failed to start qemu-system-x86_64");
     let status = child.wait().expect("failed to wait on qemu");

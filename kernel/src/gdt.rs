@@ -26,12 +26,16 @@ lazy_static! {
         let code_selector = gdt.append(Descriptor::kernel_code_segment());
         let data_selector = gdt.append(Descriptor::kernel_data_segment());
         let tss_selector = gdt.append(Descriptor::tss_segment(&TSS));
+        let user_code_selector = gdt.append(Descriptor::user_code_segment());
+        let user_data_selector = gdt.append(Descriptor::user_data_segment());
         (
             gdt,
             Selectors {
                 code_selector,
                 data_selector,
                 tss_selector,
+                user_code_selector,
+                user_data_selector,
             },
         )
     };
@@ -41,6 +45,8 @@ struct Selectors {
     code_selector: SegmentSelector,
     data_selector: SegmentSelector,
     tss_selector: SegmentSelector,
+    pub user_code_selector: SegmentSelector,
+    pub user_data_selector: SegmentSelector,
 }
 
 pub fn init() {
@@ -61,4 +67,8 @@ pub fn init() {
 
         load_tss(GDT.1.tss_selector);
     }
+}
+
+pub fn get_user_selectors() -> (SegmentSelector, SegmentSelector) {
+    (GDT.1.user_code_selector, GDT.1.user_data_selector)
 }
