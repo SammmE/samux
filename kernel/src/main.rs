@@ -48,6 +48,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // --- RUN SHELL FIRST ---
     let executor = Executor::new();
     executor.spawn(Task::new(shell::runshell()));
+    executor.spawn(Task::new(kernel::demo::bouncing_box()));
 
     // Note: The executor.run() below will loop forever.
     executor.run();

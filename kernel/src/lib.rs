@@ -4,6 +4,7 @@
 extern crate alloc;
 
 pub mod allocator;
+pub mod demo;
 pub mod drivers;
 pub mod framebuffer;
 pub mod fs;
