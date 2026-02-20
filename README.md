@@ -10,7 +10,7 @@ A barebones, `no_std` operating system kernel written from scratch in Rust, prim
 
 ---
 
-## 🦀 Why Samux?
+## Why Samux?
 
 This project is a journey into the world of low-level systems programming. The primary goals are:
 
@@ -95,8 +95,8 @@ This is the high-level plan for Samux, from a "Hello, World!" kernel to a basic 
 ### Phase 4: Userspace & Filesystems
 * [ ] **Syscalls:** Design and implement a basic syscall interface.
 * [ ] **Userspace:** Create the ability to load and run a simple program in user mode.
-* [ ] **Basic Filesystem:** Implement a RAM-based filesystem (initrd) to load initial user programs.
-* [ ] **Basic Shell:** Create a minimal interactive shell to test keyboard input and run commands.
+* [x] **Basic Filesystem:** Implement a FAT filesystem to load initial user programs.
+* [x] **Basic Shell:** Create a minimal interactive shell to test keyboard input and run commands.
 
 ---
 
