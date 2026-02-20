@@ -1,9 +1,10 @@
+// kernel/src/demo.rs
 use crate::framebuffer::WRITER;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::Context;
 use core::task::Poll;
-use futures_util::task::AtomicWaker;
+use x86_64::instructions::interrupts; // Import interrupts
 
 pub async fn bouncing_box() {
     let mut x = 100;
@@ -15,7 +16,11 @@ pub async fn bouncing_box() {
     loop {
         // 1. Calculate new position
         // We scope this block so the Lock is released immediately after drawing!
-        {
+
+        // SAFETY: We disable interrupts while locking the framebuffer.
+        // If we don't, and a timer interrupt switches to the Shell while we hold this lock,
+        // the Shell will try to lock it again to print "samux>", causing a Deadlock.
+        interrupts::without_interrupts(|| {
             if let Some(writer) = WRITER.lock().as_mut() {
                 let width = writer.width();
                 let height = writer.height();
@@ -46,12 +51,14 @@ pub async fn bouncing_box() {
 
                 // Reset color to white for text
                 writer.set_color(255, 255, 255);
+
+                // === THE FIX ===
+                // Push the changes from RAM to VRAM
+                writer.present();
             }
-        } // Lock is released here
+        }); // Lock is released here, interrupts re-enabled
 
         // 2. Sleep/Yield
-        // Since we don't have a timer interrupt sleep yet, we simulate it
-        // by yielding to the scheduler multiple times to slow down the animation.
         for _ in 0..100 {
             yield_now().await;
         }
@@ -59,8 +66,6 @@ pub async fn bouncing_box() {
 }
 
 // --- Helper for the sleep loop ---
-// This creates a Future that returns Pending once, then Ready.
-// It forces the Executor to switch to the Shell task.
 struct YieldNow {
     yielded: bool,
 }
@@ -73,7 +78,6 @@ impl Future for YieldNow {
             Poll::Ready(())
         } else {
             self.yielded = true;
-            // Register to be woken up immediately again
             cx.waker().wake_by_ref();
             Poll::Pending
         }

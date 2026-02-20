@@ -1,6 +1,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use bootloader_api::info::{FrameBufferInfo, PixelFormat};
+use core::cmp::{max, min};
 use core::fmt;
 use font8x8::{BASIC_FONTS, UnicodeFonts};
 use spin::Mutex;
@@ -17,6 +18,11 @@ pub struct FrameBufferWriter {
     // Pre-calculated color bytes for the specific pixel format (R,G,B,A/Pad)
     color_bytes: [u8; 4],
     scale: usize,
+    // Optimization: Dirty Rectangle Tracking
+    dirty_min_x: usize,
+    dirty_min_y: usize,
+    dirty_max_x: usize,
+    dirty_max_y: usize,
 }
 
 impl FrameBufferWriter {
@@ -33,6 +39,11 @@ impl FrameBufferWriter {
             y_pos: 0,
             color_bytes: [255, 255, 255, 0], // Default to white
             scale: 1,
+            // Initialize dirty rect to the full screen so the first present() draws everything
+            dirty_min_x: 0,
+            dirty_min_y: 0,
+            dirty_max_x: info.width,
+            dirty_max_y: info.height,
         };
 
         // Calculate the correct byte order for white immediately
@@ -41,10 +52,55 @@ impl FrameBufferWriter {
         writer
     }
 
+    /// Marks a region of the screen as "dirty" (needs to be copied to VRAM).
+    fn mark_dirty(&mut self, x: usize, y: usize, width: usize, height: usize) {
+        let screen_width = self.info.width;
+        let screen_height = self.info.height;
+
+        // Clamp input to screen bounds
+        let start_x = min(x, screen_width);
+        let start_y = min(y, screen_height);
+        let end_x = min(x + width, screen_width);
+        let end_y = min(y + height, screen_height);
+
+        // Expand the dirty area to include this new rectangle
+        self.dirty_min_x = min(self.dirty_min_x, start_x);
+        self.dirty_min_y = min(self.dirty_min_y, start_y);
+        self.dirty_max_x = max(self.dirty_max_x, end_x);
+        self.dirty_max_y = max(self.dirty_max_y, end_y);
+    }
+
     /// Flushes the backbuffer to the actual VRAM.
-    /// This is the only time we touch the slow video memory.
-    fn present(&mut self) {
-        self.framebuffer.copy_from_slice(&self.backbuffer);
+    /// This uses the dirty rectangle to copy ONLY the changed pixels.
+    pub fn present(&mut self) {
+        // If nothing is dirty, do nothing
+        if self.dirty_min_x >= self.dirty_max_x || self.dirty_min_y >= self.dirty_max_y {
+            return;
+        }
+
+        let stride = self.info.stride;
+        let bpp = self.info.bytes_per_pixel;
+
+        // We iterate row by row within the dirty Y range
+        for y in self.dirty_min_y..self.dirty_max_y {
+            let row_start = (y * stride) + self.dirty_min_x;
+            let row_end = (y * stride) + self.dirty_max_x;
+
+            let byte_start = row_start * bpp;
+            let byte_end = row_end * bpp;
+
+            // Safety check to ensure we don't go out of bounds
+            if byte_end <= self.framebuffer.len() {
+                self.framebuffer[byte_start..byte_end]
+                    .copy_from_slice(&self.backbuffer[byte_start..byte_end]);
+            }
+        }
+
+        // Reset dirty rect to "inverted" (empty) state
+        self.dirty_min_x = self.info.width;
+        self.dirty_min_y = self.info.height;
+        self.dirty_max_x = 0;
+        self.dirty_max_y = 0;
     }
 
     pub fn set_color(&mut self, r: u8, g: u8, b: u8) {
@@ -70,6 +126,9 @@ impl FrameBufferWriter {
         self.x_pos = 0;
         self.y_pos = 0;
         self.backbuffer.fill(0);
+
+        // Mark the entire screen as dirty to ensure the black screen is drawn
+        self.mark_dirty(0, 0, self.info.width, self.info.height);
         self.present();
     }
 
@@ -124,6 +183,9 @@ impl FrameBufferWriter {
         }
 
         self.y_pos -= font_height;
+
+        // Scrolling invalidates the WHOLE screen, so we must redraw everything.
+        self.mark_dirty(0, 0, self.info.width, self.info.height);
     }
 
     /// Optimized rectangle drawer.
@@ -160,7 +222,7 @@ impl FrameBufferWriter {
             &self.color_bytes[..bpp]
         };
 
-        // Draw row by row
+        // Draw row by row into BACKBUFFER
         for y in 0..draw_height {
             let row_idx = y_start + y;
             // Calculate the starting byte index for this row
@@ -175,6 +237,9 @@ impl FrameBufferWriter {
                 }
             }
         }
+
+        // Register the change so present() knows to draw it
+        self.mark_dirty(x_start, y_start, draw_width, draw_height);
     }
 
     fn write_char(&mut self, c: char) {
